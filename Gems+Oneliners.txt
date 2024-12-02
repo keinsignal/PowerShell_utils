@@ -142,7 +142,7 @@ Function Parse-SecPol($CfgFile){
 }
 
 Function Set-SecPol($Object, $CfgFile){
-   $SecPool.psobject.Properties.GetEnumerator() | %{
+   $Object.psobject.Properties.GetEnumerator() | %{
         "[$($_.Name)]"
         $_.Value | %{
             $_.psobject.Properties.GetEnumerator() | %{
