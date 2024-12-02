@@ -1,0 +1,232 @@
+##########################################################################
+## for fun, why not try running this file directly in powershell?
+
+##################################################################################
+# Run powershell as admin of a foreign domain 
+# (that is, local user on client, remote admin over net)
+runas /env /noprofile /netonly /user:[domain]\[user] powershell.exe
+
+##################################################################
+# Bypass local ExecutionPolicy by running from cmd or .bat file:
+powershell -ExecutionPolicy Bypass -File [path\to\script.ps1]
+
+#################################################################
+# Look up a certificate template by name, return OID
+(Get-ADCertificateTemplate -Domain $domain -TemplateName $Name ).'msPKI-Cert-Template-OID'
+
+#################################################################
+# using $_ in pipelines (aka delay-bind blocks):
+dir *.log | Rename-Item -NewName { $_.BaseName + ".bak" }
+
+#################################################################
+# Calculated Properties with Select-Object (pseudocode)
+Get-Something | Select SomeProperty, SomeOtherProperty, @{n="CalculatedProperty";e={Code-GoesHere; Access-OriginalProperties -like $_.OriginalProperty}}
+
+#################################################################
+# A Generic Uninstaller
+# First, determine if the target program is installed, and get its ID #.
+$app = Get-WmiObject -Class Win32_Product -Filter "Name = `'$product_name`'"
+
+# Or, do a wildcard match (SQL wildcards: % = any string, _ = single character)
+$app = Get-WmiObject -Class Win32_Product -Filter "Name LIKE `'$product_name%`'" 
+
+if ($app.IdentifyingNumber -ne $null) {
+    Write-Output "Uninstalling the Old Version"
+    Start-Process "msiexec /x $app.IdentifyingNumber /norestart /qn" -Wait
+    # If above doesn't work, try
+    #  $id = $app.IdentifyingNumber
+    #  Start-Process -FilePath "C:\windows\System32\msiexec.exe" -ArgumentList "/x $id /norestart /qn" -Wait
+}
+
+######################################################
+# Embedding object properties and subitems in strings
+# is a real pain in the ass, right?
+
+Write-Host "This will fail: $your_object[$n].Property"
+
+Write-Host "This will succeed, `"" $your_object[$n].Property "`" but it will look a bit crap." 
+
+Write-Host "When in doubt, `$() wrappers are your friend: $($your_object[$n].Property)"
+
+# you can put code directly in the wrapper too.
+# When embedded in double quotes, it will act as if .ToString() had been appended to the output.
+# For example, on my PC:
+ $(Get-ComputerInfo).OsLastBootupTime     # returns Monday, November 25, 2024 12:06:02 PM (a datetime object)
+ "$((Get-ComputerInfo).OsLastBootupTime)" # returns 11/25/2024 12:06:02 (a string, formatted according to locale settings)
+
+# note that the extra parentheses are needed to ensure correct parsing, but aren't related to the change in behavior.
+# the first example works with or without the extra parens.
+
+
+#################################################################
+# Random notes on Splits and Sorts
+# [string].Split() can't split on empty separators 
+# (i.e., Split('') doesn't work). To split a string
+# into an array use ToCharArray() instead:
+$("string".ToCharArray() | Sort-Object) -join ''    # Returns "ginrst"
+# However! Because it's sorting as chars, not strings,
+# case sensitivity is always turned on ("ASCIIbetical order") 
+$("String".ToCharArray() | Sort-Object) -join ''    # Returns "Sginrt"
+# In the unlikely event you need to work around this, probably easiest to
+# just force everything to the same case.
+$("StriNg".ToLower().ToCharArray()  | Sort-Object ) -join '' # Returns "ginrst"
+
+###############################################################################
+# Remote exchange shell (for on-prem/hybrid servers)
+# Note: The ConnectionUri value is always http, not https!
+# for more detailed docs see
+# https://docs.microsoft.com/en-us/powershell/exchange/connect-to-exchange-servers-using-remote-powershell/
+#
+$UserCredential = Get-Credential
+$Session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri http://mail.stauer.com/PowerShell/ -Authentication Kerberos -Credential $UserCredential
+Import-PSSession $Session -DisableNameChecking
+# clean exit with
+Remove-PSSession $Session
+
+###############################################################################
+# Remote O365 admin
+Connect-ExchangeOnline
+# Remote Azure AD admin 
+Connect-MsolService
+
+###############################################################################
+# Pull a report of duplicate devices out of a CSV file generated from KACE.
+# Note the use of -FilterScript. 
+$invento = Import-Csv devices.csv
+$invento | Group-Object -Property 'SBIOS Serial Nbr' | Where-Object -FilterScript {
+  $_.Count -gt 1
+} |
+Select-Object -ExpandProperty Group |
+ft 'Name', 'SBIOS Serial Nbr', 'Model', 'Last Sync Formatted'
+
+###############################################################################
+# System Uptime variations
+
+# This is probably the easiest to remember, though it may take a couple seconds to run
+(Get-ComputerInfo).OsLastBootupTime
+
+# Get-WmiObject runs much faster but is a little more complicated to work with.
+(Get-WmiObject -Class Win32_OperatingSystem).LastBootUpTime
+# ^ returns year, month, day, hour, minutes, seconds, milliseconds & tZ offset 
+# as a long, hard-to-read string.
+
+$os = (Get-WmiObject -Class Win32_OperatingSystem)
+$os.ConvertToDateTime($os.LastBootUpTime)
+# ^ returns latest boot time as a DateTime object 
+
+(get-date) - (Get-ComputerInfo).OsLastBootupTime 
+(get-date) - ((Get-WmiObject -Class Win32_OperatingSystem) | Select @{n="lbu";e={$_.ConvertToDateTime($_.LastBootUpTime)}}).lbu
+# ^ return TimeSpan objects containing days, hours, minutes, etc. since last bootup.
+
+###############################################################################
+# These functions allow managing local security policies via script.
+Function Parse-SecPol($CfgFile){ 
+    secedit /export /cfg "$CfgFile" | out-null
+    $obj = New-Object psobject
+    $index = 0
+    $contents = Get-Content $CfgFile -raw
+    [regex]::Matches($contents,"(?<=\[)(.*)(?=\])") | %{
+        $title = $_
+        [regex]::Matches($contents,"(?<=\]).*?((?=\[)|(\Z))", [System.Text.RegularExpressions.RegexOptions]::Singleline)[$index] | %{
+            $section = new-object psobject
+            $_.value -split "\r\n" | ?{$_.length -gt 0} | %{
+                $value = [regex]::Match($_,"(?<=\=).*").value
+                $name = [regex]::Match($_,".*(?=\=)").value
+                $section | add-member -MemberType NoteProperty -Name $name.tostring().trim() -Value $value.tostring().trim() -ErrorAction SilentlyContinue | out-null
+            }
+            $obj | Add-Member -MemberType NoteProperty -Name $title -Value $section
+        }
+        $index += 1
+    }
+    return $obj
+}
+
+Function Set-SecPol($Object, $CfgFile){
+   $SecPool.psobject.Properties.GetEnumerator() | %{
+        "[$($_.Name)]"
+        $_.Value | %{
+            $_.psobject.Properties.GetEnumerator() | %{
+                "$($_.Name)=$($_.Value)"
+            }
+        }
+    } | out-file $CfgFile -ErrorAction Stop
+    secedit /configure /db c:\windows\security\local.sdb /cfg "$CfgFile" /areas SECURITYPOLICY
+}
+
+# Example usage. 
+$SecPool = Parse-SecPol -CfgFile C:\test\Test.cgf
+$SecPool.'System Access'.PasswordComplexity = 1
+$SecPool.'System Access'.MinimumPasswordLength = 8
+$SecPool.'System Access'.MaximumPasswordAge = 60
+
+Set-SecPol -Object $SecPool -CfgFile C:\Test\Test.cfg
+
+#################################################################################
+# Error Handling, which you should.
+#
+# Keywords: try/catch/finally
+# "try" blocks isolate potential errors and let you handle them in non-fatal ways.
+# Note that sometimes you'll need to run commands with -ErrorAction Stop to ensure
+# correct handling.
+
+# This will not work as expected:
+    try { Get-ChildItem x:\fakepath }
+    catch { "nothing here boss" } 
+
+# Instead,
+    try { Get-ChildItem x:\fakepath -ErrorAction Stop }
+    catch { "nothing here boss" } 
+
+# "catch" blocks can deal with different error types. If no error is specified,
+# handle all errors not already dealt with by previous catch blocks. 
+
+    try {
+       $wc = new-object System.Net.WebClient
+       $wc.DownloadFile("http://www.contoso.com/MyDoc.doc","c:\temp\MyDoc.doc")
+    }
+    catch [System.Net.WebException],[System.IO.IOException] {
+        "Unable to download MyDoc.doc from http://www.contoso.com."
+    }
+    catch {
+        "An error occurred that could not be resolved."
+    }
+# error types passed to catch will include all subclasses of that error, so "catch [System.Net]" should catch
+# all network-related errors, for example.
+
+# "finally" blocks always run regardless of whether the try block succeeded or failed. 
+# They will run even if the script was terminated within a catch block, or by user action (e.g. Ctrl-C)
+# this can be useful in a lot of circumstances where an "end" block might not be appropriate, e.g.
+# deleting temp files that would only have been created if the script reached a certain point.
+
+# both "catch" and "finally" are only valid following a "try" block, obvs.
+
+# for more info RTFM - 
+    get-help about_Try_Catch_Finally
+
+
+
+###############################################################################
+# USING THROW TO CREATE A MANDATORY PARAMETER (a nice gem from the "Throw" docs)
+# 
+# You can use the Throw keyword to make a function parameter mandatory.
+# 
+# This is an alternative to using the Mandatory parameter of the Parameter
+# keyword. When you use the Mandatory parameter, the system prompts the user
+# for the required parameter value. When you use the Throw keyword, the
+# command stops and displays the error record.
+# 
+# For example, the Throw keyword in the parameter subexpression makes the
+# Path parameter a required parameter in the function.
+# 
+# In this case, the Throw keyword throws a message string, but it is the
+# presence of the Throw keyword that generates the terminating error if the
+# Path parameter is not specified. The expression that follows Throw is
+# optional.
+
+    function Get-XMLFiles
+    {
+      param ($path = $(throw "The Path parameter is required."))
+      dir -path $path\*.xml -recurse |
+        sort lastwritetime |
+          ft lastwritetime, attributes, name  -auto
+    }
