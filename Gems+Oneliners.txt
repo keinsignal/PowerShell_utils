@@ -89,6 +89,15 @@ Connect-ExchangeOnline
 # Remote Azure AD admin 
 Connect-MsolService
 
+###############################################
+# Sort Exchange Online Mailbox folders by size
+# Ordinarily folder sizes are reportes as a string like "30.36 MB (31,833,370 bytes)"
+# We use Sort-Object with an embedded script expression to extract the raw bytes and process it as an int.
+Get-EXOMailboxFolderStatistics -Identity $username | `
+sort-object @{ Expression = {
+  $tmp = $_.FolderSize -replace ".*\((.+) bytes\)","`$1"; [uint64]$foldersize = $tmp -replace ",",""; $foldersize }; Ascending=$false } | `
+ft Name,FolderSize,ItemsInFolder
+
 ###############################################################################
 # Pull a report of duplicate devices out of a CSV file generated from KACE.
 # Note the use of -FilterScript. 
