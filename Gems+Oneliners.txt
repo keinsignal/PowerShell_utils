@@ -22,6 +22,18 @@ dir *.log | Rename-Item -NewName { $_.BaseName + ".bak" }
 # Calculated Properties with Select-Object (pseudocode)
 Get-Something | Select SomeProperty, SomeOtherProperty, @{n="CalculatedProperty";e={Code-GoesHere; Access-OriginalProperties -like $_.OriginalProperty}}
 
+##############################
+# Sort a hashtable by key name
+# Sort-Object won't work, even with "-Property name" because it
+# sees the hash as one thing, not a list of keys and values. 
+# To fix this, use .GetEnumerator
+$data = @{a=1;b=2;c=3;d="banana"} 
+$data.GetEnumerator() | sort -Property name  
+
+# Alternatively, use the "[ordered]" datatype at creation time
+# to set the order in which keys should be displayed by default
+$data = [ordered]@{a=1;b=2;c=3;d="banana"}
+
 #################################################################
 # A Generic Uninstaller
 # First, determine if the target program is installed, and get its ID #.
@@ -93,9 +105,10 @@ Connect-MsolService
 # Sort Exchange Online Mailbox folders by size
 # Ordinarily folder sizes are reportes as a string like "30.36 MB (31,833,370 bytes)"
 # We use Sort-Object with an embedded script expression to extract the raw bytes and process it as an int.
-Get-EXOMailboxFolderStatistics -Identity $username | `
+Get-EXOMailboxFolderStatistics -Identity $username | 
 sort-object @{ Expression = {
-  $tmp = $_.FolderSize -replace ".*\((.+) bytes\)","`$1"; [uint64]$foldersize = $tmp -replace ",",""; $foldersize }; Ascending=$false } | `
+  $tmp = $_.FolderSize -replace ".*\((.+) bytes\)","`$1"; [uint64]$foldersize = $tmp -replace ",",""; $foldersize 
+}; Ascending=$false } | 
 ft Name,FolderSize,ItemsInFolder
 
 ###############################################################################
