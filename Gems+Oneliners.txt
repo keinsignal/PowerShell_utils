@@ -35,7 +35,7 @@ $data.GetEnumerator() | sort -Property name
 $data = [ordered]@{a=1;b=2;c=3;d="banana"}
 
 ########################################################################################
-# Hashtable splatting - compile options to commands in a hash and invoke with @hashname
+# Hashtable splatting - compile params in a hash and invoke with @hashname
 # via https://learn.microsoft.com/en-us/powershell/scripting/learn/deep-dives/everything-about-hashtable
 # Instead of this mess:
 Get-ADUser -Properties LockedOut, PasswordExpired -Filter {GivenName -eq 'Kevin'}
