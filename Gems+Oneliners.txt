@@ -34,6 +34,31 @@ $data.GetEnumerator() | sort -Property name
 # to set the order in which keys should be displayed by default
 $data = [ordered]@{a=1;b=2;c=3;d="banana"}
 
+########################################################################################
+# Hashtable splatting - compile options to commands in a hash and invoke with @hashname
+# via https://learn.microsoft.com/en-us/powershell/scripting/learn/deep-dives/everything-about-hashtable
+# Instead of this mess:
+Get-ADUser -Properties LockedOut, PasswordExpired -Filter {GivenName -eq 'Kevin'}
+# try
+$search = @{
+    Properties = ("LockedOut", "PasswordExpired")
+    Filter = { GivenName -eq "Kevin" }
+}
+Get-ADUser @search
+
+# You can use multiple hash-splats to separate values that don't change from
+# ones that need to be updated on every loop/invocation
+$common = @{ SearchBase = 'DC=ad,DC=example,DC=com' }
+
+# You can also modify or add params to hashes after creation
+$search.Filter = { GivenName -eq $name -and Enabled -eq "True" }
+
+# Note that the Filter block is evaulated on each execution so this will work,
+# but if a variable is used to define any property that isn't in a code block, 
+# it will not be updated if the original variable changes.
+$names = ('Kevin', 'Lisa', 'Derek')
+$names | % { $name = $_; Get-ADUser @search @common }
+
 #################################################################
 # A Generic Uninstaller
 # First, determine if the target program is installed, and get its ID #.
