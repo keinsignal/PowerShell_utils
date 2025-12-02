@@ -25,7 +25,7 @@ Preserve timestamps, make the .zip files have the same LastWriteTime as the orig
 '@
 
 $USAGE = @'
-Usage: Archive-Logs.ps1 (-LogFolder <path\to\logs\> | -LogFolderList <file_containing_list_of_folders>)
+Usage: LogArchive.ps1 (-LogFolder <path\to\logs\> | -LogFolderList <file_containing_list_of_folders>)
  (-LogFilePattern <pattern>) (-ArchiveDays <n>) (-DeleteDays <x>) (-Recurse) (-Verbose) (-Force)
  
 Options: 
@@ -134,4 +134,5 @@ foreach ($folder in $FolderList) {
 		}
 	}
   }
+
 }
