@@ -1,8 +1,8 @@
 #========================================================================
-#	Title: LogArchive.ps1]
-# Author: Eric Hillman
+#	Title: LogArchive.ps1
+#   Author: Eric Hillman
 #	Purpose: Manages archiving and deletion of log files
-# Last update: 2024-11-27
+#   Last update: 2025-12-02
 
 [CmdletBinding()]
 param( 
@@ -136,3 +136,4 @@ foreach ($folder in $FolderList) {
   }
 
 }
+
